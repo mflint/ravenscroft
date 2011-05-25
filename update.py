@@ -7,6 +7,7 @@ import urllib2
 import datetime
 import re
 import time
+import ConfigParser
 from subprocess import check_call
 
 file_mode = 0o644
@@ -17,15 +18,6 @@ from BeautifulSoup import BeautifulSoup
 sys.path.append('PyRSS2Gen')
 import PyRSS2Gen
 
-# TODO: MKF
-download_directory = "/var/www/podcasts/"
-
-# TODO: MKF
-podcast_title = "Any Questions"
-# TODO: MKF
-podcast_description = "Topical discussion in which a panel of personalities from the worlds of politics, media and elsewhere are posed questions by the audience."
-# TODO: MKF
-show_url = "http://www.bbc.co.uk/programmes/b006qgvj"
 def episode_description(f):
     # Could examine the file's ID3 tags or extract the date
     # from the filename to make this more interesting
@@ -56,7 +48,7 @@ def iplayer_dl(url):
     command = [ "../get_iplayer/get_iplayer", url,
                 "--modes=flashaaclow,flashaacstd",
                 "--outputradio", download_directory,
-                "--file-prefix", "<name>-<dldate>",
+                "--file-prefix", "<name>-<firstbcast>",
                 "--command", "\"\"",
                 "--force" ]
     print >> sys.stdout, command
@@ -79,59 +71,76 @@ def item_from_file(f):
 
 
 
+config = ConfigParser.ConfigParser()
+config.read('ravenscroft.cfg')
 
-#number_to_keep = None
-number_to_keep = 9999
-base_podcast_url = None
+for i,s in enumerate(config.sections()):
+    podcast_title = s
+    download_directory = os.path.join(config.get(s, 'destination'),config.get(s, 'subdirectory'))
+    base_podcast_url = config.get(s, 'baseurl')
+    number_to_keep = int(config.get(s, 'numbertokeep'))
+    xml_filename = config.get(s, 'filename')
+    show_url = config.get(s, 'showurl')
+    podcast_description = config.get(s, 'description')
+    #episode_description = config.get(s, 'episodedescription')
 
-try:
-#    if len(sys.argv) != 3:
-    if len(sys.argv) != 2:
-        raise Exception, "Wrong number of arguments"
-#    number_to_keep = int(sys.argv[1])
-#    base_podcast_url = sys.argv[2]
-    base_podcast_url = sys.argv[1]
-except Exception as e:
-    print >> sys.stderr, str(e)
-#    print >> sys.stderr, "Usage: %s <NUMBER-TO-KEEP> <BASE_PODCAST_URL>"
-    print >> sys.stderr, "Usage: %s <BASE_PODCAST_URL>"
-    sys.exit(1)
+    print 'title:', podcast_title
+    print 'download_directory:', download_directory
+    print 'base_podcast_url:', base_podcast_url
+    print 'number_to_keep:', number_to_keep
+    print 'xml_filename:', xml_filename
+    print 'show_url:', show_url
+    print 'podcast_description:', podcast_description
+    #print 'episode_description:', episode_description
 
-files = [ os.path.join(download_directory,x) for x in os.listdir(download_directory) if is_aac(x) ]
+    #try:
+    #    if len(sys.argv) != 3:
+    #    if len(sys.argv) != 2:
+    #        raise Exception, "Wrong number of arguments"
+    #    number_to_keep = int(sys.argv[1])
+    #    base_podcast_url = sys.argv[2]
+    #    base_podcast_url = sys.argv[1]
+    #except Exception as e:
+    #    print >> sys.stderr, str(e)
+    #    print >> sys.stderr, "Usage: %s <NUMBER-TO-KEEP> <BASE_PODCAST_URL>"
+    #    print >> sys.stderr, "Usage: %s <BASE_PODCAST_URL>"
+    #    sys.exit(1)
 
-files.sort( key = mtime )
+    check_call(["mkdir","-p",download_directory])
 
-for f in files[0:-number_to_keep]:
-    os.remove(f)
+    files = [ os.path.join(download_directory,x) for x in os.listdir(download_directory) if is_aac(x) ]
 
-opener = urllib2.build_opener()
+    files.sort( key = mtime )
 
-soup = BeautifulSoup(opener.open(show_url))
+    for f in files[0:-number_to_keep]:
+        os.remove(f)
 
-a = soup.find( iplayer_console_tag )
+    opener = urllib2.build_opener()
 
-check_call(["mkdir","-p",download_directory])
+    soup = BeautifulSoup(opener.open(show_url))
 
-iplayer_dl(a['href'])
+    a = soup.find( iplayer_console_tag )
+>>>>>>    TODO!
+    print 'a:', a
+    iplayer_dl(a['href'])
 
-# Now generate the XML for the podcast:
+    # Now generate the XML for the podcast:
 
-files = [ x for x in os.listdir(download_directory) if is_aac(x) ]
-files.sort( key = lambda x: mtime(os.path.join(download_directory,x)) )
+    files = [ x for x in os.listdir(download_directory) if is_aac(x) ]
+    files.sort( key = lambda x: mtime(os.path.join(download_directory,x)) )
 
-# Make them readable:
-for f in files:
-    time.sleep(2)
-    os.chmod(os.path.join(download_directory,f),file_mode)
+    # Make them readable:
+    for f in files:
+        time.sleep(2)
+        os.chmod(os.path.join(download_directory,f),file_mode)
 
-rss = PyRSS2Gen.RSS2(
-    title = podcast_title,
-    link = show_url,
-    description = podcast_description,
-    lastBuildDate = datetime.datetime.now(),
-    items = [ item_from_file(f) for f in files ] )
+    rss = PyRSS2Gen.RSS2(
+        title = podcast_title,
+        link = show_url,
+        description = podcast_description,
+        lastBuildDate = datetime.datetime.now(),
+        items = [ item_from_file(f) for f in files ] )
 
-# TODO: MKF
-output_filename = os.path.join(download_directory,"anyquestions.xml")
-rss.write_xml(open(output_filename,"w"))
-os.chmod(output_filename,file_mode)
+    output_filename = os.path.join(download_directory,xml_filename)
+    rss.write_xml(open(output_filename,"w"))
+    os.chmod(output_filename,file_mode)
