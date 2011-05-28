@@ -57,7 +57,8 @@ def iplayer_dl(url):
 def item_from_file(f):
     full = os.path.join(download_directory,f)
     extension_removed = re.sub('\.aac$','',f,re.I)
-    url_for_mp3 = base_podcast_url + urllib2.quote(f)
+    #url_for_mp3 = base_podcast_url + urllib2.quote(f)
+    url_for_mp3 = os.path.join(base_podcast_url,subdirectory,urllib2.quote(f))
     return PyRSS2Gen.RSSItem(
         title = extension_removed,
         link = show_url,
@@ -76,7 +77,8 @@ config.read('ravenscroft.cfg')
 
 for i,s in enumerate(config.sections()):
     podcast_title = s
-    download_directory = os.path.join(config.get(s, 'destination'),config.get(s, 'subdirectory'))
+    subdirectory = config.get(s, 'subdirectory')
+    download_directory = os.path.join(config.get(s, 'destination'),subdirectory)
     base_podcast_url = config.get(s, 'baseurl')
     number_to_keep = int(config.get(s, 'numbertokeep'))
     xml_filename = config.get(s, 'filename')
@@ -120,8 +122,8 @@ for i,s in enumerate(config.sections()):
     soup = BeautifulSoup(opener.open(show_url))
 
     a = soup.find( iplayer_console_tag )
->>>>>>    TODO!
-    print 'a:', a
+#>>>>>>    TODO!
+#    print 'a:', a
     iplayer_dl(a['href'])
 
     # Now generate the XML for the podcast:
