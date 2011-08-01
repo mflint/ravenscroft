@@ -9,6 +9,7 @@ import re
 import time
 import ConfigParser
 from subprocess import check_call
+from xml.dom.minidom import parse
 
 file_mode = 0o644
 
@@ -18,10 +19,21 @@ from BeautifulSoup import BeautifulSoup
 sys.path.append('PyRSS2Gen')
 import PyRSS2Gen
 
+def episode_title(f):
+    metadatafile = f.replace(".aac", ".xml")
+    if not os.path.exists(os.path.join(download_directory,metadatafile)):
+        return re.sub('\.aac$','',f,re.I)
+
+    dom = parse(os.path.join(download_directory, metadatafile))
+    return getText(dom.getElementsByTagName("title")[0].childNodes)
+
 def episode_description(f):
-    # Could examine the file's ID3 tags or extract the date
-    # from the filename to make this more interesting
-    return ""
+    metadatafile = f.replace(".aac", ".xml")
+    if not os.path.exists(os.path.join(download_directory,metadatafile)):
+        return ""
+
+    dom = parse(os.path.join(download_directory, metadatafile))
+    return getText(dom.getElementsByTagName("desc")[0].childNodes)
 
 def is_mp3(f):
     return re.search('\.mp3$',f,re.I)
@@ -50,17 +62,16 @@ def iplayer_dl(url):
                 "--outputradio", download_directory,
                 "--file-prefix", "<name>-<firstbcast>",
                 "--command", "\"\"",
-                "--force" ]
+                "--force",
+                "--metadata", "generic" ]
     print >> sys.stdout, command
     check_call(command)
 
 def item_from_file(f):
     full = os.path.join(download_directory,f)
-    extension_removed = re.sub('\.aac$','',f,re.I)
-    #url_for_mp3 = base_podcast_url + urllib2.quote(f)
     url_for_mp3 = os.path.join(base_podcast_url,subdirectory,urllib2.quote(f))
     return PyRSS2Gen.RSSItem(
-        title = extension_removed,
+        title = episode_title(f),
         link = show_url,
         description = episode_description(f),
         guid = PyRSS2Gen.Guid(url_for_mp3),
@@ -69,6 +80,12 @@ def item_from_file(f):
                                         os.path.getsize(full),
                                         "audio/x-aac"))
 
+def getText(nodelist):
+    rc = []
+    for node in nodelist:
+        if node.nodeType == node.TEXT_NODE:
+            rc.append(node.data)
+    return ''.join(rc)
 
 
 
@@ -84,6 +101,10 @@ for i,s in enumerate(config.sections()):
     xml_filename = config.get(s, 'filename')
     show_url = config.get(s, 'showurl')
     podcast_description = config.get(s, 'description')
+    podcast_image_url = config.get(s, 'image')
+    podcast_image = PyRSS2Gen.Image(url = podcast_image_url,
+            title = podcast_title,
+            link = show_url)
     #episode_description = config.get(s, 'episodedescription')
 
     print 'title:', podcast_title
@@ -93,6 +114,7 @@ for i,s in enumerate(config.sections()):
     print 'xml_filename:', xml_filename
     print 'show_url:', show_url
     print 'podcast_description:', podcast_description
+    print 'podcast_image_url:', podcast_image_url
     #print 'episode_description:', episode_description
 
     #try:
@@ -129,6 +151,7 @@ for i,s in enumerate(config.sections()):
     # Now generate the XML for the podcast:
 
     files = [ x for x in os.listdir(download_directory) if is_aac(x) ]
+    #files.sort( key = lambda x: mtime(os.path.join(download_directory,x)), reverse=True )
     files.sort( key = lambda x: mtime(os.path.join(download_directory,x)) )
 
     # Make them readable:
@@ -139,6 +162,7 @@ for i,s in enumerate(config.sections()):
     rss = PyRSS2Gen.RSS2(
         title = podcast_title,
         link = show_url,
+        image = podcast_image,
         description = podcast_description,
         lastBuildDate = datetime.datetime.now(),
         items = [ item_from_file(f) for f in files ] )
